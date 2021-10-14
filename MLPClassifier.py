@@ -42,6 +42,7 @@ import os.path
 from pathlib import Path
 from joblib import dump, load
 import random
+import qgis
 
 from .util import writeArrayToTIFF, echo
 
@@ -256,20 +257,20 @@ class MLPClassifier:
         # Run the dialog event loop
         result = self.dlg.exec_()
         # See if OK was pressed
-        if result:
+        # if result:
             # Do something useful here - delete the line containing pass and
             # substitute with your code.
             #pass
             #select the first item of the listWiddget RA
-            item1LsRA=self.dlg.ltCapasRA.item(0)
-            if item1LsRA != None :
-                # Recover layer from layer dictionary
-                layer = self.lyDic[str(item1LsRA.text())]
-                # Copy layer and create instance
-                layer_copyName = layer.name() + "_copy"
-                layer_copy = layer.clone()
-                layer_copy.setName(layer_copyName)
-                QgsProject.instance().addMapLayer(layer_copy)
+            # item1LsRA=self.dlg.ltCapasRA.item(0)
+            # if item1LsRA != None :
+            #     # Recover layer from layer dictionary
+            #     layer = self.lyDic[str(item1LsRA.text())]
+            #     # Copy layer and create instance
+            #     layer_copyName = layer.name() + "_copy"
+            #     layer_copy = layer.clone()
+            #     layer_copy.setName(layer_copyName)
+            #     QgsProject.instance().addMapLayer(layer_copy)
                 
     def loadLayers(self):
         # Fetch the currently loaded layers
@@ -309,8 +310,10 @@ class MLPClassifier:
         for i in range(self.dlg.ltCapasRA.count()):
             bands.append(self.dlg.ltCapasRA.item(i).text())
 
-        self.classify(bands)
+        self.classify(bands, self.nClasses)
 
+        rlayer = qgis.core.QgsRasterLayer(os.path.join(self.workDir,'result.tif'), 'result')
+        QgsProject.instance().addMapLayer(rlayer)
 
     def run_training(self):
         # Get raster bands
@@ -391,10 +394,6 @@ class MLPClassifier:
 
 
     def preprocessing(self, bands, trainLyrName, group='MLPClassifier'):
-        import qgis
-
-        
-
         # verificar que la capa de entrenamiento tenga el atributo de clase
         trainLayer = self.lyDic[trainLyrName]
         fieldNames = trainLayer.fields().names()
@@ -450,25 +449,23 @@ class MLPClassifier:
         cv[clase] = 1
         return cv
 
-    def classify(self, rasterLayers):
-        print(rasterLayers)
+    def classify(self, rasterLayers, nClasses):
         bands = []                                                  # lista con las bandas para la clasificación
         sx = 1                                                      # tamaño en x
         sy = 1                                                      # tamaño en y
 
         for rasterLayer in rasterLayers:                            # para cada capa raster en la clasificacion
             layer = self.lyDic[rasterLayer]                         # buscar la capa en el diccionario de capas
-            print('Abriendo raster', rasterLayer, '...')
+            print('Procesando raster', rasterLayer, '...')
             rasterData = gdal.Open(layer.source())                  # abrir el archivo original
             rasterArray = rasterData.GetRasterBand(1).ReadAsArray() # leemos los datos como un arreglo
             transform = rasterData.GetGeoTransform()                # obtener la transformación geográfica
             projection = rasterData.GetProjection()                 # obtener la proyección geográfica
 
-            print('Calculando el máximo ...')
             maxBandVal = np.amax(rasterArray)                       # calculamos el valor máximo de la banda para normalizar
             sx, sy = rasterArray.shape                              # guardamos el tamaño original del arreglo
+            print(rasterArray.shape)
             rasterArray = rasterArray.reshape(-1)                   # convertimos en un arreglo de 1 dimensión
-            print('Normalizando capa', rasterLayer, '...')
             bands.append([(val / maxBandVal) for val in rasterArray])   # agregamos la el arreglo normalizado a la lista de bandas
 
         print('Calculando Xs y Ys ...')
@@ -480,47 +477,20 @@ class MLPClassifier:
         bands.insert(0, ys)                                         # agregarlos al inicio de la lista de bandas para preservar
         bands.insert(0, xs)                                         # el orden para la clasificación (x, y, b0, b1, b2, ...)
 
-        print('Num bands', len(bands))
-
-        # toClassify = list(zip(*bands))                              # los unimos para que se combine cada elemento para clasificar
-        batchCounter = 1000                                         # número de lotes
-        batchSize = round((sx * sy) / batchCounter)                 # calcular el tamaño de cada lote
+        batchCount = sy                                             # número de lotes
+        batchSize = sx                                              # calcular el tamaño de cada lote
         print('Iniciando clasificación\nTamaño del lote:', batchSize)
         outBand = []                                                # arreglo de salida
-        for b in range(batchCounter):                               # para cada lote 
-            if b % round(batchCounter / 100) ==0:
-                print('\r',100*b/batchCounter, '%', end='')    
-                print('\r', end='') 
-            batch = list(zip(*[band[(b*batchSize):((b+1)*batchSize)] for band in bands]))          
-            outBand = outBand + [round(x*3) for x in self.model.predict(batch)] # clasificar, desnormalizar y agregar a la salida
+        for b in range(batchCount):                                 # para cada lote 
+            if b % round(batchCount / 100) ==0:
+                print('\r',round(100*b/batchCount, 2), '%', end='')    
+                # print('\r', end='') 
+            batch = list(zip(*[band[(b*batchSize):((b+1)*batchSize)] for band in bands]))   # crear el lote   
+            outBand.append([round(x*nClasses) for x in self.model.predict(batch)]) # clasificar, desnormalizar y agregar a la salida
         print('Ok')
 
-        outBand = np.array(outBand).reshape(sx,sy)
-        print('Guardando result en CSV ... ', end='')
-        self.saveToCSV('result', outBand)
-        print('Ok')
-
-        # for y in range(0, sy, round(sy/10)):
-        #     if y % round(sy / 10) == 0:
-        #         print(round(100 * y / sy),'%, ', sep='', end=' ')
-
-        #     row = []
-        #     for x in range(sx):
-        #         pxVal = 0
-        #         pxVec = [x/sx, y/sy]
-        #         for band in range(nBands):
-        #             pxVal += bands[band][x,y]
-        #             pxVec.append(bands[band][x,y])
-
-        #         if pxVal > 0:
-        #             row.append(pxVec)
-                
-        #     classRow = self.model.predict(row)
-        #     classRow = [round(x * 3) for x in classRow]
-        #     outBand.append(classRow)
-
-        #     outBand.append([round(x*3) for x in self.model.predict(row)])
-
+        outBand = np.transpose(np.array(outBand))                   # convertir y transponer con numpy
+        print(outBand.shape)
 
         # Escribir raster
         writeArrayToTIFF(os.path.join(self.workDir,'result.tif'), outBand, transform, projection, verbose=True)
