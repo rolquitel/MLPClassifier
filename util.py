@@ -107,6 +107,17 @@ def getTrainingData(workDir, trainingShp, bands):
         trainInputs = trainInputs + ti                              # agregar al arreglo de entradas de entrenamiento
         trainOutputs = trainOutputs + to                            # agregar al arreglo de salidas de entrenamiento
 
+    # agregar datos de entrenamiento para la clase 0
+    nZeros = round(len(trainInputs) * 0.05)
+    print('Generando', nZeros, ' vectores cero.', end='')
+    inZeros = [[random.random() / 100000 for _ in range(len(bands))] for _ in range(nZeros)]   
+    outZeros = [0] * nZeros
+    # inZeros = [[0 for _ in range(len(bands))] for _ in range(nZeros)]   
+    # outZeros = [0 for _ in range(nZeros)]
+    trainInputs = trainInputs + inZeros
+    trainOutputs = trainOutputs + outZeros
+    print('Ok.')
+
     # desordenar los datos de entrenamiento
     train = list(zip(trainInputs, trainOutputs))                    # unimos ambas listas para vincular entrads con salidas
     random.shuffle(train)                                           # desordenamos la lista unida
@@ -240,11 +251,11 @@ def mlpClassification(workDir, rasterLayers, model, classes, resFilename='result
     # print('Calculando Xs y Ys ...')
     # ys = numpy.array([[y / height] * width for y in range(height)]) # para los valores de las coordenadas verticales
     # xs = numpy.transpose(numpy.array([[x / width] * height for x in range(width)])) # para los valores de las coordenadas horizontales
-    # ys = ys.reshape(-1)                                         # convertirlos a un arreglo unidimensional
+    # ys = ys.reshape(-1)                                             # convertirlos a un arreglo unidimensional
     # xs = xs.reshape(-1)
 
-    # bands.insert(0, ys)                                         # agregarlos al inicio de la lista de bandas para preservar
-    # bands.insert(0, xs)                                         # el orden para la clasificación (x, y, b0, b1, b2, ...)
+    # bands.insert(0, ys)                                             # agregarlos al inicio de la lista de bandas para preservar
+    # bands.insert(0, xs)                                             # el orden para la clasificación (x, y, b0, b1, b2, ...)
 
     batchCount = height                                             # número de lotes
     batchSize = width                                               # calcular el tamaño de cada lote
@@ -273,13 +284,17 @@ def mlpClassification(workDir, rasterLayers, model, classes, resFilename='result
 def main():
     workDir = '/home/rolando/Descargas/raster/MLPClassifier'
     trainingShp = 'train1.shp'
+    name = '48881'
+    modelFile = name + '_modelo.mlp'
+    tifFile = name + '_resultado'
     bands = ['B1', 'B2', 'B3', 'B4']
     clases = 4
     testSize = 0.2
+    nnShape = [4, 8, 8, 8, 1]
 
     print('Cargando modelo ... ', end='')
-    if Path(os.path.join(workDir, 'model.joblib')).is_file():
-        modelo = load(os.path.join(workDir, 'model.joblib'))
+    if Path(os.path.join(workDir, modelFile)).is_file():
+        modelo = load(os.path.join(workDir, modelFile))
         clases = 4
         print('Ok.')
     else:
@@ -292,22 +307,23 @@ def main():
         trainInputs = ti[0:sep]                                         # nos quedamos con las entradas de entrenamiento
         trainOutputs = to[0:sep]                                        # nos quedamos con las salidas de entrenamiento
         
-        modelo = mlpTraining(trainInputs, trainOutputs)                 # ejecutar el entrenamiento
+        modelo = mlpTraining(trainInputs, trainOutputs, hidden_layer_sizes=nnShape) # ejecutar el entrenamiento
 
         po, mse = mlpTest(testInputs, testOutputs, modelo)              # ejecutar la prueba
 
         print('Guardando modelo ... ', end='')
-        dump(modelo, os.path.join(workDir, 'model.joblib'))             # volcar el modelo
+        dump(modelo, os.path.join(workDir, modelFile))                # volcar el modelo
         print('Ok.')
 
         print('Guardando CSV ... ', end='')
-        outs = zip(testOutputs, po)                                     # unir ambos conjuntos de salida
+        outs = zip(testInputs, testOutputs, po)                                     # unir ambos conjuntos de salida
         saveToCSV(os.path.join(workDir, 'outs.csv'), outs)              # guardarlos en un CSV
         print('Ok.')
 
-        
-
-    mlpClassification(workDir, bands, modelo, clases)
+    zero = modelo.predict([[0,0,0,0]])
+    print(zero)
+    if zero < 0.1:
+        mlpClassification(workDir, bands, modelo, clases, resFilename=tifFile)
 
 
 ###################################################################################################
