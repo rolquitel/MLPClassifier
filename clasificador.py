@@ -312,7 +312,7 @@ def main():
         po, mse = mlpTest(testInputs, testOutputs, modelo)              # ejecutar la prueba
 
         print('Guardando modelo ... ', end='')
-        dump(modelo, os.path.join(workDir, modelFile))                # volcar el modelo
+        dump(modelo, os.path.join(workDir, modelFile))                  # volcar el modelo
         print('Ok.')
 
         print('Guardando CSV ... ', end='')

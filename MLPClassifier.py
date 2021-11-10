@@ -21,12 +21,12 @@
  *                                                                         *
  ***************************************************************************/
 """
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.datasets import make_circles
-from sklearn.neural_network import MLPRegressor
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from sklearn.datasets import make_circles
+# from sklearn.neural_network import MLPRegressor
 
-from osgeo import gdal
+# from osgeo import gdal
 
 from os import X_OK
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
@@ -44,11 +44,12 @@ from joblib import dump, load
 import random
 import qgis
 
-from .util import writeArrayToTIFF, echo
+# from .clasificador import echo
 
 class MLPClassifier:
     """QGIS Plugin Implementation."""
 
+    ###################################################################################################
     def __init__(self, iface):
         """Constructor.
 
@@ -81,6 +82,10 @@ class MLPClassifier:
         # Must be set in initGui() to survive plugin reloads
         self.first_start = None
 
+        self.rnName = 'model'
+
+
+    ###################################################################################################
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
         """Get the translation for a string using Qt translation API.
@@ -97,6 +102,7 @@ class MLPClassifier:
         return QCoreApplication.translate('MLPClassifier', message)
 
 
+    ###################################################################################################
     def add_action(
         self,
         icon_path,
@@ -171,6 +177,8 @@ class MLPClassifier:
 
         return action
 
+
+    ###################################################################################################
     def initGui(self):
         
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
@@ -191,6 +199,7 @@ class MLPClassifier:
         self.first_start = True
 
 
+    ###################################################################################################
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
@@ -199,14 +208,22 @@ class MLPClassifier:
                 action)
             self.iface.removeToolBarIcon(action)
 
+
+    ###################################################################################################
     def add_to_list(self):
         # Move items selected to list of trainning caps (RA)       
-        itemsb=self.dlg.ltCapasRNA.selectedItems()
+        itemsb = self.dlg.ltCapasRNA.selectedItems()
         for item in itemsb:
-            row=self.dlg.ltCapasRNA.row(item )
+            row = self.dlg.ltCapasRNA.row(item)
             self.dlg.ltCapasRNA.takeItem(row)
-            self.dlg.ltCapasRA.addItem(str(item.text() ))
+            self.dlg.ltCapasRA.addItem(str(item.text()))
 
+        # Habilitar botón para correr el entrenamiento
+        if self.dlg.ltCapasRA.count() > 0:
+            self.dlg.btEntrenar.setDisabled(False)
+
+
+    ###################################################################################################
     def rem_from_list(self):
         # Move items selected to list of caps RNA 
         itemsb=self.dlg.ltCapasRA.selectedItems()
@@ -215,15 +232,18 @@ class MLPClassifier:
             self.dlg.ltCapasRA.takeItem(row)
             self.dlg.ltCapasRNA.addItem(str(item.text()))
 
+        # Deshabilitar botón para correr el entrenamiento
+        if self.dlg.ltCapasRA.count() == 0:
+            self.dlg.btEntrenar.setDisabled(True)
 
 
+    ###################################################################################################
     def run(self):
         """Run method that performs all the real work"""
 
         # Create the dialog with elements (after translation) and keep reference
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
         if self.first_start == True:
-            echo("Primera ejecución.",verbose=True)
             self.first_start = False
             self.dlg = MLPClassifierDialog()
             self.dlg.btAgregar.clicked.connect(self.add_to_list)
@@ -231,7 +251,6 @@ class MLPClassifier:
             self.dlg.btEntrenar.clicked.connect(self.run_training)
             self.dlg.btClasificar.clicked.connect(self.run_classify)
  
-            echo('Cargar capas', verbose=True)
             self.loadLayers()            
             self.dlg.ltCapasRNA.clear()
             self.dlg.ltCapasRA.clear()
@@ -243,13 +262,15 @@ class MLPClassifier:
                     self.dlg.ltCapasRNA.addItem(l.name())       
             #self.dlg.listWidget.setSelectionMode(2)
 
-            echo('Verificar si ya se ha entrenado')
             self.model = None
+            self.modelFilename = os.path.join(self.workDir, self.rnName + '.mlp')
             self.dlg.btClasificar.setDisabled(True)
-            model = Path(os.path.join(self.workDir, 'model.joblib'))
+            model = Path(self.modelFilename)
             if model.is_file():
-                self.model = load(os.path.join(self.workDir, 'model.joblib'))
+                self.model = load(self.modelFilename)
                 self.dlg.btClasificar.setDisabled(False)
+
+            self.dlg.btEntrenar.setDisabled(True)
 
         # show the dialog
         self.dlg.show()
@@ -271,7 +292,9 @@ class MLPClassifier:
             #     layer_copy = layer.clone()
             #     layer_copy.setName(layer_copyName)
             #     QgsProject.instance().addMapLayer(layer_copy)
-                
+
+
+    ###################################################################################################     
     def loadLayers(self):
         # Fetch the currently loaded layers
         # layers = QgsProject.instance().layerTreeRoot().children()
@@ -281,41 +304,42 @@ class MLPClassifier:
         for l in layers:
             self.lyDic[l.name()] = l
 
-    def training(self, inputs, outputs, 
-        hidden_layer_sizes=[2,16,8,1], 
-        solver='sgd', 
-        max_iter=100, 
-        learning_rate=0.002, 
-        verbose=False,
-        n_iter_no_change=10,
-        batch_size=64):
 
-        # SciKit Learn
-        model = MLPRegressor(
-            solver=solver, 
-            max_iter=max_iter,
-            learning_rate_init=learning_rate, 
-            hidden_layer_sizes=tuple(hidden_layer_sizes[1:]), 
-            verbose=verbose, 
-            n_iter_no_change=n_iter_no_change, 
-            batch_size = batch_size
-            )
-
-        model.fit(inputs, outputs)
-
-        return model
-
+    ###################################################################################################
     def run_classify(self):
         bands = []
         for i in range(self.dlg.ltCapasRA.count()):
             bands.append(self.dlg.ltCapasRA.item(i).text())
 
-        self.classify(bands, self.nClasses)
+        if self.model is None:
+            print('Cargando modelo ... ', end='')
+            if Path(os.path.join(self.workDir, self.modelFile)).is_file():
+                self.model = load(os.path.join(self.workDir, self.modelFile))
+                self.classes = 4
+                print('Ok.')
+            else:
+                print('No se encontró el modelo.')
+                return
 
-        rlayer = qgis.core.QgsRasterLayer(os.path.join(self.workDir,'result.tif'), 'result')
-        QgsProject.instance().addMapLayer(rlayer)
+        zero = self.model.predict([[0,0,0,0]])
+        print(zero)
+        if zero < 0.1:
+            mlpClassification(self.workDir, bands, self.model, self.classes, resFilename=self.tifFile)
 
+            rlayer = qgis.core.QgsRasterLayer(os.path.join(self.workDir,self.tifFile), 'result')
+            QgsProject.instance().addMapLayer(rlayer)
+        else:
+            print('No se pudo clasificar.') 
+
+
+    ###################################################################################################
     def run_training(self):
+        name = '48881'
+        self.modelFile = name + '_modelo.mlp'
+        self.tifFile = name + '_resultado'
+
+        self.testSize = float(self.dlg.txPctControl.text())
+        self.testSize = self.testSize / 100
         # Get raster bands
         bands = []
         for i in range(self.dlg.ltCapasRA.count()):
@@ -324,210 +348,326 @@ class MLPClassifier:
         print('Bandas', bands)
 
         # Get training layer
-        trainLayer = self.dlg.cbZonasEntrenamiento.currentText()
+        trainLayer = self.dlg.cbZonasEntrenamiento.currentText() + '.shp'
         print('Capa de entrenamiento', trainLayer)
-
-        # Preprocessing
-        print('Preprocesamiento ...')
-        self.nClasses = self.preprocessing(bands, trainLayer)
-        print('Ok.')
-
-        # Get training data
-        trainInputs = []
-        trainOutputs = []
-        for clase in range(1, self.nClasses+1):
-            print('Extrayendo datos de la clase', clase, end=' ')
-            trainRasterLayers = []
-            for band in bands:
-                trainRasterLayers.append(band + '_class_' + str(clase))
-
-            ti, to = self.extractTrainData(clase, trainRasterLayers, stride=10)
-            trainInputs = trainInputs + ti
-            trainOutputs = trainOutputs + to
-            print('Ok.')
-
-        train = list(zip(trainInputs, trainOutputs))
-        random.shuffle(train)
-        trainInputs, trainOutputs = zip(*train)
-
-        print(len(trainInputs))
-
-        sep = round(len(trainInputs) * 0.8)
-        testInputs = trainInputs[sep:]
-        testOutputs = trainOutputs[sep:]
-
-        trainInputs = trainInputs[0:sep]
-        trainOutputs = trainOutputs[0:sep]
-        
-        print('Entrenando ... ', end='')
-        self.model = self.training(trainInputs, trainOutputs, verbose=True, n_iter_no_change=100, max_iter=500)
-        print('Ok')
-
-        print('Prediciendo ... ', end='')
-        predictedOutputs = self.model.predict(testInputs)
-        print('Ok')
-        
-        mse = 0
-        for i in range(len(testOutputs)):
-            mse += (testOutputs[i] - predictedOutputs[i]) ** 2
-        mse /= len(testOutputs)
-        print('MSE:', mse)
-
-        print('Guardando CSV ... ', end='')
-        outs = zip(testOutputs, predictedOutputs)
-        self.saveToCSV('outs', outs)
-        print('Ok.')
-
-        echo('Dumping model ... ', end='', verbose=True)
-        dump(self.model, os.path.join(self.workDir, 'model.joblib')) 
-        echo('Ok', verbose=True)
 
         self.dlg.btClasificar.setDisabled(False)
 
+        ti, to, clases = getTrainingData(self.workDir, trainLayer, bands)
+
+        # separar conjunto de entrenamiento y de prueba
+        sep = round(len(ti) * (1 - self.testSize))              # calculamos el punto de separación
+        testInputs = ti[sep:]                                   # separamos las entradas de prueba
+        testOutputs = to[sep:]                                  # separamos las salidas de prueba
+        trainInputs = ti[0:sep]                                 # nos quedamos con las entradas de entrenamiento
+        trainOutputs = to[0:sep]    
+        self.classes = clases                                   # nos quedamos con las salidas de entrenamiento
+
+        print('Clases:', clases)
+
+        self.model = mlpTraining(trainInputs, trainOutputs, hidden_layer_sizes=[4, 8, 8, 8, 1]) # ejecutar el entrenamiento
+
+        po, mse = mlpTest(testInputs, testOutputs, self.model)              # ejecutar la prueba
+
+        print('Guardando modelo ... ', end='')
+        dump(self.model, os.path.join(self.workDir, self.modelFile))                  # volcar el modelo
+        print('Ok.')
+
+        print('Guardando CSV ... ', end='')
+        outs = zip(testInputs, testOutputs, po)                                     # unir ambos conjuntos de salida
+        saveToCSV(os.path.join(self.workDir, 'outs.csv'), outs)              # guardarlos en un CSV
+        print('Ok.')
+
+
+
+###################################################################################################
+###################################################################################################
+###################################################################################################
+###################################################################################################
+import os
+import gdal
+import ogr
+import numpy
+import random
+
+from pathlib import Path
+from sklearn.neural_network import MLPRegressor
+from joblib import dump, load
+
+
+###################################################################################################
+def writeArrayToTIFF(filename, outArray, transform, projection, noData=0):
+    '''
+    Guarda un arreglo raster en un archivo TIF
+
+    Args:
+        filename (string): nombre del archivo para guardar
+        outArray (numpy.array): arreglo con los datos del raster
+        transform (GeoTransform): geo transformación del raster
+        projection (GeoProjection): geo proyección del raster
+        noData (int, optional): valor para el valor que representa el dato nulo. Defaults to 0.
+    '''       
+    print('Guardando resultado ...', end='')
+    sx, sy = outArray.shape
+    driver = gdal.GetDriverByName("GTiff")
+    tiff = driver.Create(filename, sy, sx, 1, gdal.GDT_UInt16)
+    tiff.SetGeoTransform(transform)       
+    tiff.SetProjection(projection)           
+    tiff.GetRasterBand(1).WriteArray(outArray)
+    tiff.GetRasterBand(1).SetNoDataValue(noData)      
+    tiff.FlushCache()    
+    print('Ok.')
+
+
+###################################################################################################
+def getTrainingData(workDir, trainingShp, bands):
+    '''
+    Obtiene los datos para entrenar una red neuronal a partir de un conjunto de datos raster con 
+    varias bandas y de una capa vectorial de poligonos dada en un archivo SHP que describe las
+    zonas de entrenamiento
+
+    Args:
+        workDir (string): directorio donde están los datos, tanto raster como la capa vectorial
+        trainingShp (string): nombre de la capa vectorial
+        bands (list): lista de nombres de los archivos del conjunto de datos raster
+
+    Returns:
+        (list): lista de vectores de entradas de entrenamiento
+        (list): lista de vectores de salidas de entrenamiento
+        (int): número de clases que describe la capa vectorial
+    '''
+    trainingShp =os.path.join(workDir, trainingShp)                 # completar la ruta del archivo shp de entrenamiento
+    print(trainingShp)
+
+    tmpDir = os.path.join(workDir, 'mlpc_tmp')                      # crear el directorio temporal para trabajar
+    Path(tmpDir).mkdir(parents=True, exist_ok=True)
+
+    # verificar que la capa de entrenamiento tenga el campo de clase
+    trainingDS = ogr.Open(trainingShp, 0)                           # abrir el archivo shp de entrenamiento
+    trainingLyr = trainingDS.GetLayer(0)                            # obtener la capa del archivo
+    lyrDef = trainingLyr.GetLayerDefn()                             # obtener los metadatos de la capa
+
+    fields = [lyrDef.GetFieldDefn(i).GetName() for i in range(lyrDef.GetFieldCount())]  # obtener los nombres de los campos de la tabla de atributos
+    classFldIdx = -1                                                # índice donde se encuentra el nombre del campo de clase
+    for idx, name in enumerate(fields):                             # buscar el campo de clase
+        if name == 'clase':
+            classFldIdx = idx
+
+    if classFldIdx < 0:                                             # si no se encontró el campo de clase
+        print('No hay atributo de clase')                           # reportarlo y salir
+        return -1                                             
+
+    # calcular el número de clases que tiene la capa de entrenamiento
+    classes = 0                                                     # número de clases
+    for feat in trainingLyr:                                        # para cada poligono en la capa de entrenamiento
+        featClass = feat.GetField('clase')                          # obtener el campo de clase
+        if featClass > classes:                                     # y calcular el máximo valor de clase
+            classes = featClass
+
+    print('Clases:', classes)
+
+    # generar los clips con las bandas
+    for clase in range(1, classes+1):                               # para cada clase posible
+        print('Procesando clase', clase, ' ...', end='') 
+        for band in bands:                                          # para cada banda en el conjuntto de datos raster
+            print('banda', band, end=', ')
+            in_raster = os.path.join(workDir, band + '.tif')        # crear el nombre del raster de entrada
+            out_raster = os.path.join(tmpDir, band + '_class_'+ str(clase) + '.tif')    # y el nombre del raster de salida
+
+            # Ya se ha creado el clip?
+            if not os.path.isfile(out_raster):                      # el archivo ya existe?
+                options = gdal.WarpOptions(cutlineDSName=trainingShp, cutlineWhere='clase='+str(clase)) # no, crearlo
+                gdal.Warp(out_raster, in_raster, options=options)
+            else:
+                print('ya existe.', end=' ')                        # si, reportarlo
+        print('Ok.')
+
+    # extraer los datos de entrenamiento
+    trainInputs = []                                                # arreglo con las entradas de entrenamiento
+    trainOutputs = []                                               # arreglo con las salidas de entrenamiento
+    for clase in range(1, classes + 1):                             # para cada clase
+        trainRasterLayers = []                                      # generar una lista con los raster recortados de esa clase
+        for band in bands:                                          # para cada banda
+            trainRasterLayers.append(os.path.join(tmpDir, band + '_class_'+ str(clase) + '.tif')) # agregar el raster a la lista
+
+        ti, to = extractTrainData(trainRasterLayers, clase, classes)# extraer los datos de entradas y salidas de entrenamiento
+        trainInputs = trainInputs + ti                              # agregar al arreglo de entradas de entrenamiento
+        trainOutputs = trainOutputs + to                            # agregar al arreglo de salidas de entrenamiento
+
+    # agregar datos de entrenamiento para la clase 0
+    nZeros = round(len(trainInputs) * 0.05)
+    print('Generando', nZeros, ' vectores cero.', end='')
+    inZeros = [[random.random() / 100000 for _ in range(len(bands))] for _ in range(nZeros)]   
+    outZeros = [0] * nZeros
+    # inZeros = [[0 for _ in range(len(bands))] for _ in range(nZeros)]   
+    # outZeros = [0 for _ in range(nZeros)]
+    trainInputs = trainInputs + inZeros
+    trainOutputs = trainOutputs + outZeros
+    print('Ok.')
+
+    # desordenar los datos de entrenamiento
+    train = list(zip(trainInputs, trainOutputs))                    # unimos ambas listas para vincular entrads con salidas
+    random.shuffle(train)                                           # desordenamos la lista unida
+    trainInputs, trainOutputs = zip(*train)                         # y separamos las entradas de las salidas
+
+    return trainInputs, trainOutputs, classes
+
+
+###################################################################################################
+def mlpTest(testInputs, testOutputs, model):
+    '''
+    Ejecuta una prueba al modelo de la red neuronal
+
+    Args:
+        testInputs (list): lista de vectores de datos de entradas de prueba
+        testOutputs (list): lista de vectores de datos de salidas de prueba
+        model (): modelo de la red neuronal entrenada
+
+    Returns:
+        (list): lista de salidas predichas por el modelo
+        (float): error cuadrático medio de la prueba
+    '''
+    print('Prediciendo ... ', end='')
+    predictedOutputs = model.predict(testInputs)                    # clasificamos con los datos de prueba
+    print('Ok')
     
-    def saveToCSV(self, filename, data):
-        import csv
+    mse = 0                                                         # error cuadrático medio
+    for i in range(len(testOutputs)):                               # para cada valor de los conjuntos de salida
+        mse += (testOutputs[i] - predictedOutputs[i]) ** 2          # calcular el error cuadrático
+    mse /= len(testOutputs)                                         # obtener el promedio
+    print('MSE:', mse)
 
-        with open(os.path.join(self.workDir,filename +'.csv'), mode='w') as csv_file:
-            csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            csv_writer.writerows(data)
+    return predictedOutputs, mse
 
 
-    def preprocessing(self, bands, trainLyrName, group='MLPClassifier'):
-        # verificar que la capa de entrenamiento tenga el atributo de clase
-        trainLayer = self.lyDic[trainLyrName]
-        fieldNames = trainLayer.fields().names()
-        classFldIdx = -1
-        for idx, name in enumerate(fieldNames):
-            if name == 'clase':
-                classFldIdx = idx
+###################################################################################################
+def mlpTraining(trainInputs, trainOutputs, 
+        hidden_layer_sizes=[2,16,8,1], 
+        solver='sgd', 
+        max_iter=100, 
+        learning_rate=0.002, 
+        verbose=False,
+        n_iter_no_change=10,
+        batch_size=64
+    ):
+    print('Entrenando ... ', end='', flush=True)
+    model = MLPRegressor(                                           # crear el modelo de perceptrón multicapa
+        solver=solver, 
+        max_iter=max_iter,
+        learning_rate_init=learning_rate, 
+        hidden_layer_sizes=tuple(hidden_layer_sizes[1:]),           # quitamos el primer valor, ya que este está dado por el tamaño del vector de entrada
+        verbose=verbose, 
+        n_iter_no_change=n_iter_no_change, 
+        batch_size = batch_size
+    )
 
-        classes = 0
-        if classFldIdx < 0:
-            print('No hay atributo de clase')
-        else:
-            for feat in trainLayer.getFeatures():
-                featClass = feat.attributes()[classFldIdx]
-                if featClass > classes:
-                    classes = featClass
+    model.fit(trainInputs, trainOutputs)                            # ejecutar el ciclo de entrenamiento
+    print('Ok')
 
-            root = QgsProject.instance().layerTreeRoot()
-            MLPCGroup = root.findGroup(group)
-            groupExists = True
-            if MLPCGroup is None:
-                MLPCGroup = root.addGroup(group)
-                MLPCGroup.addLayer(trainLayer)
-                groupExists = False
+    return model                                                    # regresar el modelo
+
+
+###################################################################################################
+def extractTrainData(rasterLayers, clase, classes, stride=10):
+    bands = []                                                      # las bandas como arreglos
+    maxBandVal = []                                                 # valores máximos de cada banda
+    nBands = len(rasterLayers)                                      # número de bandas
+    for rasterLayer in rasterLayers:                                # para cada capa raster
+        rasterData = gdal.Open(rasterLayer)                         # abrir el raster
+        rasterArray = rasterData.GetRasterBand(1).ReadAsArray()     # leer los datos como arreglo
+        bands.append(rasterArray)                                   # agregar los datos leidos al arreglo de bandas
+        maxBandVal.append(numpy.amax(rasterArray))                  # calcular y agregar el máximo de la banda
+
+    height, width = bands[0].shape                                  # obtenemos el ancho y alto
+    trainInputs = []                                                # arreglo de entradas de entrenamiento
+    trainOutputs = []                                               # arreglo de salidas de entrenamiento
+
+    for y in range(0, height, stride):                              # recorrer los renglones con saltos de tamaño stride
+        if y % round(height / 10) < stride:
+            print('\rExtrayendo datos de la clase', clase, end=' ')
+            print( round(100 * y / height),'% ', sep='', end='')
             
-            for clase in range(1,classes+1):
-                print('Procesando clase', clase, ' ...', end='') 
-
-                bandGroup = MLPCGroup.addGroup('Clase ' + str(clase))
-                for band in bands:
-                    print('banda', band, end=', ')
-                    in_raster = self.lyDic[band].source()
-                    rasterName = band + '_class_'+ str(clase)
-
-                    # Ya se ha creado el clip?
-                    if rasterName not in self.lyDic:
-                        out_raster = os.path.join(self.workDir , rasterName + '.tif')
-                        options = gdal.WarpOptions(cutlineDSName=trainLayer.source(), cutlineWhere='clase='+str(clase))
-                        gdal.Warp(out_raster, in_raster, options=options)
-                        rlayer = qgis.core.QgsRasterLayer(out_raster, rasterName)
-                        QgsProject.instance().addMapLayer(rlayer, False)
-                        bandGroup.addLayer(rlayer)
-                    else:
-                        print('ya existe en el proyecto!', end=' ')
-                print('Ok.')
-
-            self.loadLayers()
-
-        return classes
-        
-    def classVector(self, clase):
-        cv = [0] * self.nClasses
-        cv[clase] = 1
-        return cv
-
-    def classify(self, rasterLayers, nClasses):
-        bands = []                                                  # lista con las bandas para la clasificación
-        sx = 1                                                      # tamaño en x
-        sy = 1                                                      # tamaño en y
-
-        for rasterLayer in rasterLayers:                            # para cada capa raster en la clasificacion
-            layer = self.lyDic[rasterLayer]                         # buscar la capa en el diccionario de capas
-            print('Procesando raster', rasterLayer, '...')
-            rasterData = gdal.Open(layer.source())                  # abrir el archivo original
-            rasterArray = rasterData.GetRasterBand(1).ReadAsArray() # leemos los datos como un arreglo
-            transform = rasterData.GetGeoTransform()                # obtener la transformación geográfica
-            projection = rasterData.GetProjection()                 # obtener la proyección geográfica
-
-            maxBandVal = np.amax(rasterArray)                       # calculamos el valor máximo de la banda para normalizar
-            sx, sy = rasterArray.shape                              # guardamos el tamaño original del arreglo
-            print(rasterArray.shape)
-            rasterArray = rasterArray.reshape(-1)                   # convertimos en un arreglo de 1 dimensión
-            bands.append([(val / maxBandVal) for val in rasterArray])   # agregamos la el arreglo normalizado a la lista de bandas
-
-        print('Calculando Xs y Ys ...')
-        ys = np.array([[y/sy]*sx for y in range(sy)])               # para los valores de las coordenadas verticales
-        xs = np.transpose(np.array([[x/sx]*sy for x in range(sx)])) # para los valores de las coordenadas horizontales
-        ys = ys.reshape(-1)                                         # convertirlos a un arreglo unidimensional
-        xs = xs.reshape(-1)
-
-        bands.insert(0, ys)                                         # agregarlos al inicio de la lista de bandas para preservar
-        bands.insert(0, xs)                                         # el orden para la clasificación (x, y, b0, b1, b2, ...)
-
-        batchCount = sy                                             # número de lotes
-        batchSize = sx                                              # calcular el tamaño de cada lote
-        print('Iniciando clasificación\nTamaño del lote:', batchSize)
-        outBand = []                                                # arreglo de salida
-        for b in range(batchCount):                                 # para cada lote 
-            if b % round(batchCount / 100) ==0:
-                print('\r',round(100*b/batchCount, 2), '%', end='')    
-                # print('\r', end='') 
-            batch = list(zip(*[band[(b*batchSize):((b+1)*batchSize)] for band in bands]))   # crear el lote   
-            outBand.append([round(x*nClasses) for x in self.model.predict(batch)]) # clasificar, desnormalizar y agregar a la salida
-        print('Ok')
-
-        outBand = np.transpose(np.array(outBand))                   # convertir y transponer con numpy
-        print(outBand.shape)
-
-        # Escribir raster
-        writeArrayToTIFF(os.path.join(self.workDir,'result.tif'), outBand, transform, projection, verbose=True)
-
-
-    def extractTrainData(self, clase, rasterLayers, stride=2):
-        bands = []
-        maxBandVal = []
-        nBands = len(rasterLayers)
-        for rasterLayer in rasterLayers:
-            layer = self.lyDic[rasterLayer]
-            # rasterData = gdal.Open(layer.dataProvider().dataSourceUri())
-            rasterData = gdal.Open(layer.source())
-            rasterArray = rasterData.GetRasterBand(1).ReadAsArray()
-            bands.append(rasterArray)
-            maxBandVal.append(np.amax(rasterArray))
-
-        print(bands[0].shape)
-        sx, sy = bands[0].shape
-        trainInputs = []
-        trainOutputs = []
-
-        for y in range(0,sy, stride):
-            if y % round(sy / 10) < stride:
-                print(round(100 * y / sy),'%, ', sep='', end=' ')
+        for x in range(0, width, stride):                           # recorrer los pixeles del renglón con saltos de tamaño stride
+            pxVal = 0                                               # suma de los valores del pixel en cada banda
+            # pxVec = [x / width, y / height]                         # incluir los índices en el entrenamiento
+            pxVec = []                                              # vector de entrenamiento
+            for band in range(nBands):                              # para cada banda
+                pxVal += bands[band][y, x]                          # sumamos el valor del pixel en esa banda
+                pxVec.append(bands[band][y, x] / maxBandVal[band])  # agregamos el valor del pixel en esa banda al vector de entrenamiento
                 
-            for x in range(0, sx, stride):
-                pxVal = 0
-                pxVec = [x/sx, y/sy]
-                for band in range(nBands):
-                    pxVal += bands[band][x,y]
-                    pxVec.append(bands[band][x,y] / maxBandVal[band])
-                    
-                if pxVal > 0:
-                    trainInputs.append(pxVec)
-                    trainOutputs.append(clase / self.nClasses)
+            if pxVal > 0:                                           # si el pixel tiene valor
+                trainInputs.append(pxVec)                           # lo agregamos a las entradas de entrenamiento
+                trainOutputs.append(clase / classes)                # y la salida corresponde a la clase normalizada
 
-        print(len(trainInputs))
+    print('\rExtrayendo datos de la clase', clase, 'Ok.', len(trainInputs))
 
-        return trainInputs, trainOutputs
+    return trainInputs, trainOutputs                                # regresamos las entradas y salidas de entrenamiento
+
+###################################################################################################
+def saveToCSV(filename, data):
+    import csv
+
+    with open(filename, mode='w') as csv_file:
+        csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        csv_writer.writerows(data)
+
+
+###################################################################################################
+def mlpClassification(workDir, rasterLayers, model, classes, resFilename='result.tif'):
+    import time
+
+    start = time.time()
+    print('Iniciando clasificación...')
+    bands = []                                                      # lista con las bandas para la clasificación
+    width = 1                                                       # tamaño en x
+    height = 1                                                      # tamaño en y
+
+    for rasterLayer in rasterLayers:                                # para cada capa raster en la clasificacion
+        print('Procesando raster', rasterLayer, '...', end='')
+        rasterData = gdal.Open(os.path.join(workDir, rasterLayer + '.tif')) # abrir el archivo original
+        rasterArray = rasterData.GetRasterBand(1).ReadAsArray()     # leemos los datos como un arreglo
+        transform = rasterData.GetGeoTransform()                    # obtener la transformación geográfica
+        projection = rasterData.GetProjection()                     # obtener la proyección geográfica
+
+        maxBandVal = numpy.amax(rasterArray)                        # calculamos el valor máximo de la banda para normalizar
+        height, width = rasterArray.shape                           # guardamos el tamaño original del arreglo
+        rasterArray = rasterArray.reshape(-1)                       # convertimos en un arreglo de 1 dimensión
+        bands.append([(val / maxBandVal) for val in rasterArray])   # agregamos la el arreglo normalizado a la lista de bandas
+        print('Ok.')
+
+    # print('Calculando Xs y Ys ...')
+    # ys = numpy.array([[y / height] * width for y in range(height)]) # para los valores de las coordenadas verticales
+    # xs = numpy.transpose(numpy.array([[x / width] * height for x in range(width)])) # para los valores de las coordenadas horizontales
+    # ys = ys.reshape(-1)                                             # convertirlos a un arreglo unidimensional
+    # xs = xs.reshape(-1)
+
+    # bands.insert(0, ys)                                             # agregarlos al inicio de la lista de bandas para preservar
+    # bands.insert(0, xs)                                             # el orden para la clasificación (x, y, b0, b1, b2, ...)
+
+    batchCount = height                                             # número de lotes
+    batchSize = width                                               # calcular el tamaño de cada lote
+    outBand = []                                                    # arreglo de salida
+    for b in range(batchCount):                                     # para cada lote 
+        if b % round(batchCount / 100) == 0:
+            print('\rClasificando ...',round(100 * b / batchCount, 2), '%', end='')    
+        batch = list(zip(*[band[(b * batchSize):((b + 1) * batchSize)] for band in bands]))   # crear el lote   
+        outBand.append(model.predict(batch)) 
+    print('\rClasificando ... Ok.            ')
+
+    print('Postprocesando ...', end='',flush=True)
+    outBand = numpy.array(outBand)                                  # convertir a numpy array
+    outBand = outBand / numpy.amax(outBand)
+    outBand = numpy.array([[round(classes * x) for x in row] for row in outBand])    # establilizar en las clases
+    print('Ok.')
+
+    # Escribir raster
+    writeArrayToTIFF(os.path.join(workDir,resFilename), outBand, transform, projection)
+
+    end = time.time()
+    print('Finalizado en ', round(end - start, 1), 's.')
+
+
+###################################################################################################
+
+
+
