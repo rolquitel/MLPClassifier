@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>770</width>
-    <height>565</height>
+    <width>818</width>
+    <height>658</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -23,14 +23,14 @@
          <item>
           <widget class="QLabel" name="label_2">
            <property name="text">
-            <string>Nombre de salida</string>
+            <string>Output name</string>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="label">
            <property name="text">
-            <string>Zonas de entrenamiento</string>
+            <string>Training zones</string>
            </property>
           </widget>
          </item>
@@ -39,7 +39,11 @@
        <item>
         <layout class="QVBoxLayout" name="verticalLayout_12">
          <item>
-          <widget class="QLineEdit" name="txNombreSalida"/>
+          <widget class="QLineEdit" name="txNombreSalida">
+           <property name="text">
+            <string>output</string>
+           </property>
+          </widget>
          </item>
          <item>
           <widget class="QComboBox" name="cbZonasEntrenamiento"/>
@@ -58,7 +62,7 @@
      <item>
       <widget class="QGroupBox" name="groupBox_3">
        <property name="title">
-        <string>Capas raster</string>
+        <string>Raster layers</string>
        </property>
        <layout class="QHBoxLayout" name="horizontalLayout_7">
         <item>
@@ -151,18 +155,11 @@
        <item>
         <widget class="QGroupBox" name="groupBox">
          <property name="title">
-          <string>Conjuntos</string>
+          <string>Sets</string>
          </property>
          <layout class="QHBoxLayout" name="horizontalLayout_5">
           <item>
-           <layout class="QVBoxLayout" name="verticalLayout_7">
-            <item>
-             <widget class="QLabel" name="label_3">
-              <property name="text">
-               <string>Entrenamiento</string>
-              </property>
-             </widget>
-            </item>
+           <layout class="QHBoxLayout" name="horizontalLayout">
             <item>
              <widget class="QLabel" name="label_4">
               <property name="text">
@@ -170,32 +167,22 @@
               </property>
              </widget>
             </item>
-           </layout>
-          </item>
-          <item>
-           <layout class="QVBoxLayout" name="verticalLayout_4">
             <item>
-             <widget class="QLineEdit" name="txPctEntrenamiento">
-              <property name="text">
-               <string>80</string>
+             <widget class="QSpinBox" name="sbPctControl">
+              <property name="minimum">
+               <number>5</number>
               </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLineEdit" name="txPctControl">
-              <property name="text">
-               <string>20</string>
+              <property name="maximum">
+               <number>40</number>
               </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item>
-           <layout class="QVBoxLayout" name="verticalLayout_13">
-            <item>
-             <widget class="QLabel" name="label_8">
-              <property name="text">
-               <string>%</string>
+              <property name="singleStep">
+               <number>1</number>
+              </property>
+              <property name="stepType">
+               <enum>QAbstractSpinBox::DefaultStepType</enum>
+              </property>
+              <property name="value">
+               <number>20</number>
               </property>
              </widget>
             </item>
@@ -214,7 +201,7 @@
        <item>
         <widget class="QGroupBox" name="groupBox_2">
          <property name="title">
-          <string>Entrenamiento</string>
+          <string>Training</string>
          </property>
          <layout class="QHBoxLayout" name="horizontalLayout_6">
           <item>
@@ -222,21 +209,28 @@
             <item>
              <widget class="QLabel" name="label_5">
               <property name="text">
-               <string>Capas ocultas</string>
+               <string>Shape of HL</string>
               </property>
              </widget>
             </item>
             <item>
              <widget class="QLabel" name="label_6">
               <property name="text">
-               <string>Épocas</string>
+               <string>Max iter</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_3">
+              <property name="text">
+               <string>Learning rate</string>
               </property>
              </widget>
             </item>
             <item>
              <widget class="QLabel" name="label_7">
               <property name="text">
-               <string>Error</string>
+               <string>Max error</string>
               </property>
              </widget>
             </item>
@@ -245,26 +239,63 @@
           <item>
            <layout class="QVBoxLayout" name="verticalLayout_6">
             <item>
-             <widget class="QLineEdit" name="txCapasOcultas">
+             <widget class="QLineEdit" name="txShape">
+              <property name="toolTip">
+               <string>Shape of hidden layers, blank separated integers</string>
+              </property>
               <property name="text">
-               <string>2</string>
+               <string>6 8 6</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QLineEdit" name="txEpocas">
-              <property name="text">
-               <string>100</string>
+             <widget class="QSpinBox" name="sbMaxIter">
+              <property name="minimum">
+               <number>10</number>
+              </property>
+              <property name="maximum">
+               <number>2000</number>
+              </property>
+              <property name="singleStep">
+               <number>10</number>
+              </property>
+              <property name="value">
+               <number>100</number>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QLineEdit" name="txError">
-              <property name="inputMask">
-               <string/>
+             <widget class="QDoubleSpinBox" name="sbLearningRate">
+              <property name="decimals">
+               <number>3</number>
               </property>
-              <property name="text">
-               <string>0.001</string>
+              <property name="minimum">
+               <double>0.001000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>0.100000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.001000000000000</double>
+              </property>
+              <property name="value">
+               <double>0.002000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDoubleSpinBox" name="sbMaxError">
+              <property name="decimals">
+               <number>3</number>
+              </property>
+              <property name="maximum">
+               <double>0.100000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.001000000000000</double>
+              </property>
+              <property name="value">
+               <double>0.001000000000000</double>
               </property>
              </widget>
             </item>
@@ -274,22 +305,59 @@
         </widget>
        </item>
        <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_9"/>
+       </item>
+       <item>
         <widget class="QPushButton" name="btEntrenar">
          <property name="text">
-          <string>Entrenar</string>
+          <string>Train</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btClasificar">
-         <property name="text">
-          <string>Clasificar</string>
-         </property>
-        </widget>
+        <layout class="QHBoxLayout" name="horizontalLayout_11"/>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_14">
+         <item>
+          <widget class="QPushButton" name="btOpenModel">
+           <property name="text">
+            <string>O</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btClasificar">
+           <property name="text">
+            <string>Classify</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
       </layout>
      </item>
     </layout>
+   </item>
+   <item>
+    <widget class="QPlainTextEdit" name="txLog">
+     <property name="readOnly">
+      <bool>true</bool>
+     </property>
+    </widget>
    </item>
    <item>
     <widget class="QDialogButtonBox" name="button_box">

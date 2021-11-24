@@ -56,6 +56,7 @@ def getTrainingData(workDir, trainingShp, bands):
     Path(tmpDir).mkdir(parents=True, exist_ok=True)
 
     # verificar que la capa de entrenamiento tenga el campo de clase
+    print(trainingShp)
     trainingDS = ogr.Open(trainingShp, 0)                           # abrir el archivo shp de entrenamiento
     trainingLyr = trainingDS.GetLayer(0)                            # obtener la capa del archivo
     lyrDef = trainingLyr.GetLayerDefn()                             # obtener los metadatos de la capa
@@ -67,7 +68,7 @@ def getTrainingData(workDir, trainingShp, bands):
             classFldIdx = idx
 
     if classFldIdx < 0:                                             # si no se encontró el campo de clase
-        print('No hay atributo de clase')                           # reportarlo y salir
+        print('No class attribute')                                 # reportarlo y salir
         return -1                                             
 
     # calcular el número de clases que tiene la capa de entrenamiento
@@ -81,9 +82,9 @@ def getTrainingData(workDir, trainingShp, bands):
 
     # generar los clips con las bandas
     for clase in range(1, classes+1):                               # para cada clase posible
-        print('Procesando clase', clase, ' ...', end='') 
+        print('Processing class', clase, ' ...', end='') 
         for band in bands:                                          # para cada banda en el conjuntto de datos raster
-            print('banda', band, end=', ')
+            print('band', band, end=', ')
             in_raster = os.path.join(workDir, band + '.tif')        # crear el nombre del raster de entrada
             out_raster = os.path.join(tmpDir, band + '_class_'+ str(clase) + '.tif')    # y el nombre del raster de salida
 
@@ -92,7 +93,7 @@ def getTrainingData(workDir, trainingShp, bands):
                 options = gdal.WarpOptions(cutlineDSName=trainingShp, cutlineWhere='clase='+str(clase)) # no, crearlo
                 gdal.Warp(out_raster, in_raster, options=options)
             else:
-                print('ya existe.', end=' ')                        # si, reportarlo
+                print('also exists.', end=' ')                      # si, reportarlo
         print('Ok.')
 
     # extraer los datos de entrenamiento
@@ -109,7 +110,7 @@ def getTrainingData(workDir, trainingShp, bands):
 
     # agregar datos de entrenamiento para la clase 0
     nZeros = round(len(trainInputs) * 0.05)
-    print('Generando', nZeros, ' vectores cero.', end='')
+    print('Generating ', nZeros, ' zero vectors.', end='')
     inZeros = [[random.random() / 100000 for _ in range(len(bands))] for _ in range(nZeros)]   
     outZeros = [0] * nZeros
     # inZeros = [[0 for _ in range(len(bands))] for _ in range(nZeros)]   
@@ -140,7 +141,7 @@ def mlpTest(testInputs, testOutputs, model):
         (list): lista de salidas predichas por el modelo
         (float): error cuadrático medio de la prueba
     '''
-    print('Prediciendo ... ', end='')
+    print('Predicting ... ', end='')
     predictedOutputs = model.predict(testInputs)                    # clasificamos con los datos de prueba
     print('Ok')
     
@@ -163,7 +164,8 @@ def mlpTraining(trainInputs, trainOutputs,
         n_iter_no_change=10,
         batch_size=64
     ):
-    print('Entrenando ... ', end='', flush=True)
+    # print('Entrenando ... ', end='', flush=True)
+    print('Training ... ', end='')
     model = MLPRegressor(                                           # crear el modelo de perceptrón multicapa
         solver=solver, 
         max_iter=max_iter,
@@ -197,7 +199,7 @@ def extractTrainData(rasterLayers, clase, classes, stride=10):
 
     for y in range(0, height, stride):                              # recorrer los renglones con saltos de tamaño stride
         if y % round(height / 10) < stride:
-            print('\rExtrayendo datos de la clase', clase, end=' ')
+            print('\rExtracting data of class', clase, end=' ')
             print( round(100 * y / height),'% ', sep='', end='')
             
         for x in range(0, width, stride):                           # recorrer los pixeles del renglón con saltos de tamaño stride
@@ -212,7 +214,7 @@ def extractTrainData(rasterLayers, clase, classes, stride=10):
                 trainInputs.append(pxVec)                           # lo agregamos a las entradas de entrenamiento
                 trainOutputs.append(clase / classes)                # y la salida corresponde a la clase normalizada
 
-    print('\rExtrayendo datos de la clase', clase, 'Ok.', len(trainInputs))
+    print('\rExtracting data of class', clase, 'Ok.', len(trainInputs))
 
     return trainInputs, trainOutputs                                # regresamos las entradas y salidas de entrenamiento
 
@@ -230,13 +232,13 @@ def mlpClassification(workDir, rasterLayers, model, classes, resFilename='result
     import time
 
     start = time.time()
-    print('Iniciando clasificación...')
+    print('Starting classification ...')
     bands = []                                                      # lista con las bandas para la clasificación
     width = 1                                                       # tamaño en x
     height = 1                                                      # tamaño en y
 
     for rasterLayer in rasterLayers:                                # para cada capa raster en la clasificacion
-        print('Procesando raster', rasterLayer, '...', end='')
+        print('Processing raster', rasterLayer, '...', end='')
         rasterData = gdal.Open(os.path.join(workDir, rasterLayer + '.tif')) # abrir el archivo original
         rasterArray = rasterData.GetRasterBand(1).ReadAsArray()     # leemos los datos como un arreglo
         transform = rasterData.GetGeoTransform()                    # obtener la transformación geográfica
@@ -262,12 +264,13 @@ def mlpClassification(workDir, rasterLayers, model, classes, resFilename='result
     outBand = []                                                    # arreglo de salida
     for b in range(batchCount):                                     # para cada lote 
         if b % round(batchCount / 100) == 0:
-            print('\rClasificando ...',round(100 * b / batchCount, 2), '%', end='')    
+            print('\rClassifying ...',round(100 * b / batchCount, 2), '%', end='')    
         batch = list(zip(*[band[(b * batchSize):((b + 1) * batchSize)] for band in bands]))   # crear el lote   
         outBand.append(model.predict(batch)) 
-    print('\rClasificando ... Ok.            ')
+    print('\rClassifying ... Ok.            ')
 
-    print('Postprocesando ...', end='',flush=True)
+    # print('Postprocessing ...', end='', flush=True)
+    print('Postprocessing ...', end='')
     outBand = numpy.array(outBand)                                  # convertir a numpy array
     outBand = outBand / numpy.amax(outBand)
     outBand = numpy.array([[round(classes * x) for x in row] for row in outBand])    # establilizar en las clases
@@ -277,7 +280,7 @@ def mlpClassification(workDir, rasterLayers, model, classes, resFilename='result
     writeArrayToTIFF(os.path.join(workDir,resFilename), outBand, transform, projection)
 
     end = time.time()
-    print('Finalizado en ', round(end - start, 1), 's.')
+    print('Process ended in', round(end - start, 1), 's.')
 
 
 ###################################################################################################
@@ -292,7 +295,7 @@ def main():
     testSize = 0.2
     nnShape = [4, 8, 8, 8, 1]
 
-    print('Cargando modelo ... ', end='')
+    print('Loading model ... ', end='')
     if Path(os.path.join(workDir, modelFile)).is_file():
         modelo = load(os.path.join(workDir, modelFile))
         clases = 4
@@ -311,11 +314,11 @@ def main():
 
         po, mse = mlpTest(testInputs, testOutputs, modelo)              # ejecutar la prueba
 
-        print('Guardando modelo ... ', end='')
+        print('Saving model ... ', end='')
         dump(modelo, os.path.join(workDir, modelFile))                  # volcar el modelo
         print('Ok.')
 
-        print('Guardando CSV ... ', end='')
+        print('Saving CSV ... ', end='')
         outs = zip(testInputs, testOutputs, po)                                     # unir ambos conjuntos de salida
         saveToCSV(os.path.join(workDir, 'outs.csv'), outs)              # guardarlos en un CSV
         print('Ok.')
@@ -327,6 +330,6 @@ def main():
 
 
 ###################################################################################################
-main()
+# main()
 
 

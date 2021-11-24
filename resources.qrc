@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/plugins/MLPClassifier" >
         <file>icon.png</file>
+        <file>open.png</file>
     </qresource>
 </RCC>
