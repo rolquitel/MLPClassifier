@@ -21,15 +21,7 @@
  *                                                                         *
  ***************************************************************************/
 """
-# import numpy as np
-# import matplotlib.pyplot as plt
-# from sklearn.datasets import make_circles
-# from sklearn.neural_network import MLPRegressor
-
-# from osgeo import gdal
-
 from os import X_OK
-# from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtCore import *
 from qgis.PyQt.QtGui import *
 from qgis.PyQt.QtWidgets import *
@@ -47,7 +39,7 @@ import qgis
 from . import util
 import sys
 
-from . import mlp_classifier as mlpc
+from . import mlpc
 class MLPClassifier:
     """QGIS Plugin Implementation."""
 
@@ -322,20 +314,22 @@ class MLPClassifier:
         for i in range(self.dlg.ltCapasRA.count()):
             bands.append(self.dlg.ltCapasRA.item(i).text())
 
-        if self.model is None:
-            print('Loading model ... ', end='')
-            if Path(os.path.join(self.workDir, self.modelFile)).is_file():
-                self.model = load(os.path.join(self.workDir, self.modelFile))
-                self.classes = 4
-                print('Ok.')
-            else:
-                print('Model was not found.')
-                return
+        # if self.model is None:
+        #     print('Loading model ... ', end='')
+        #     if Path(os.path.join(self.workDir, self.modelFile)).is_file():
+        #         self.model = load(os.path.join(self.workDir, self.modelFile))
+        #         self.classes = 4
+        #         print('Ok.')
+        #     else:
+        #         print('Model was not found.')
+        #         return
 
-        zero = self.model.predict([[0,0,0,0]])
-        print(zero)
-        if zero < self.dlg.sbMaxError.value():
-            mlpc.mlpClassification(self.workDir, bands, self.model, self.classes, resFilename=self.tifFile)
+        # zero = self.cl.predict([[0,0,0,0]])
+        # print(zero)
+
+        mse = self.cl.test(self.sp.test_inputs, self.sp.test_outputs)
+        if mse < self.dlg.sbMaxError.value():
+            self.cl.classify(self.workDir, bands, self.tifFile)
 
             rlayer = qgis.core.QgsRasterLayer(os.path.join(self.workDir,self.tifFile), 'result')
             QgsProject.instance().addMapLayer(rlayer)
@@ -354,8 +348,6 @@ class MLPClassifier:
             QMessageBox.about(None, "Error", "Shape of hidden layers is not recognized")
             return
 
-        # QMessageBox.about(None, "Hola", "Soy un popup genérico")
-
         self.testSize = float(self.dlg.sbPctControl.value())
         self.testSize = self.testSize / 100
         # Get raster bands
@@ -371,39 +363,24 @@ class MLPClassifier:
 
         self.dlg.btClasificar.setDisabled(False)
 
-        ti, to, clases = mlpc.getTrainingData(self.workDir, trainLayer, bands)
-
-        # separar conjunto de entrenamiento y de prueba
-        print('Splitting training and test sets ... ')
-        print('Size of control set:', self.dlg.sbPctControl.value(), '%')
-        sep = round(len(ti) * (1 - self.testSize))                  # calculamos el punto de separación
-        testInputs = ti[sep:]                                       # separamos las entradas de prueba
-        testOutputs = to[sep:]                                      # separamos las salidas de prueba
-        trainInputs = ti[0:sep]                                     # nos quedamos con las entradas de entrenamiento
-        trainOutputs = to[0:sep]    
-        self.classes = clases                                       # nos quedamos con las salidas de entrenamiento
-
-        print('Clases:', clases)
+        self.sp = mlpc.Sampler(self.workDir, trainLayer, bands)
+        self.sp.getTrainingData()
+        self.sp.splitData(self.testSize)
 
         print('Run training...')
         print('Shape of NN: ', shape)
         print('Max iterations: ', self.dlg.sbMaxIter.value())
         print('Learning rate: ', self.dlg.sbLearningRate.value())
-        self.model = mlpc.mlpTraining(                              # ejecutar el entrenamiento
-            trainInputs, 
-            trainOutputs, 
-            hidden_layer_sizes=shape,
-            max_iter=self.dlg.sbMaxIter.value(),
-            learning_rate=self.dlg.sbLearningRate.value(),
-        ) 
 
-        po, mse = mlpc.mlpTest(testInputs, testOutputs, self.model) # ejecutar la prueba
+        self.cl = mlpc.MLPR_Classifier(
+            self.sp.classes, 
+            shape, 
+            max_iter=self.dlg.sbMaxIter.value(), 
+            learning_rate=self.dlg.sbLearningRate.value())
+        self.cl.training(self.sp.train_inputs, self.sp.train_outputs)  
 
         print('Saving model ... ', end='')
-        dump(self.model, os.path.join(self.workDir, self.modelFile))# volcar el modelo
+        self.cl.save(os.path.join(self.workDir, self.modelFile))
         print('Ok.')
 
-        print('Saving CSV ... ', end='')
-        outs = zip(testInputs, testOutputs, po)                     # unir ambos conjuntos de salida
-        mlpc.saveToCSV(os.path.join(self.workDir, 'outs.csv'), outs)# guardarlos en un CSV
-        print('Ok.')
+

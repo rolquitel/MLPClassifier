@@ -53,7 +53,7 @@ class Logger:
         if self.out:
             self.out.write(m)
 
-        self.edit.repaint()
+        self.edit.repaint()             # importante para no tener que esperar el ciclo de refresco de QT
 
 def get_shape(shape):
     try:
